@@ -1,0 +1,44 @@
+pipeline {
+    agent any 
+  environment {
+        TAG = "1.0.${BUILD_NUMBER}"
+    }
+    stages {
+        stage('Build and Push') {
+            steps {
+            withCredentials([
+                string(credentialsId: 'nexus_url', variable: 'NEXUS_URL'),
+                usernamePassword(credentialsId: 'nexus_cred', usernameVariable: 'NEXUS_CRED_USR', passwordVariable: 'NEXUS_CRED_PSW')
+            ]) {
+                sh(label: 'ECR login and docker push', script:
+                '''
+                #!/bin/bash
+                echo "Build and push into NEXUS"
+                set +x # Don't echo credentials from the login command!
+                echo "Building New NEXUS Image"
+                # Enable Debug and Exit immediately
+                set -xe
+                docker login -u ${NEXUS_CRED_USR} -p ${NEXUS_CRED_PSW} ${NEXUS_URL}
+                docker build -t ${NEXUS_URL}/appdashboard-ui:${TAG} .
+                #two push one for master tag other is git commit ID
+                docker push ${NEXUS_URL}/appdashboard-ui:${TAG}
+                docker tag ${NEXUS_URL}/appdashboard-ui:${TAG} ${NEXUS_URL}/appdashboard-ui:latest
+                docker push ${NEXUS_URL}/appdashboard-ui:latest
+                '''.stripIndent())
+                }
+            }
+        } 
+       stage('Deploy GenAI app') {      
+            steps {
+                sh(label: 'kube-deployment', script:
+                '''
+                #!/bin/bash
+                    set -xe
+                    kubectl delete pod -n nabla-genai $(kubectl get po -n nabla-genai -l app=appdashboard-ui| grep -v NAME | awk {'print $1'}) || true
+                    kubectl -n nabla-genai apply -f kube-appdashboard-ui.yaml
+                    kubectl -n nabla-genai rollout restart deploy appdashboard-ui
+                '''.stripIndent())
+           }
+       }
+    }
+}

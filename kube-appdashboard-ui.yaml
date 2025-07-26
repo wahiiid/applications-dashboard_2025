@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: appdashboard-ui
+  namespace: nabla-genai
+spec:
+  type: NodePort
+  ports:
+    - port: 5173
+      nodePort: 30640
+      targetPort: 5173
+      protocol: TCP
+  selector:
+    app: appdashboard-ui
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appdashboard-ui
+  namespace: nabla-genai
+  labels:
+    app: appdashboard-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: appdashboard-ui
+  template:
+    metadata:
+      labels:
+        app: appdashboard-ui
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: name
+                    operator: In
+                    values:
+                      - worker
+      containers:
+        - name: appdashboard-ui-container
+          image: 18.211.134.5:30302/appdashboard-ui:latest
+          imagePullPolicy: Always
+          ports:
+            - name: web
+              containerPort: 5173
+      imagePullSecrets:
+        - name: regcred
